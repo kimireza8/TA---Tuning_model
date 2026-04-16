@@ -9,7 +9,8 @@ import os
 import json
 import torch
 from datasets import load_dataset
-from trl import SFTTrainer, SFTConfig
+from trl import SFTTrainer
+from transformers import TrainingArguments
 from unsloth import FastLanguageModel
 from unsloth.chat_templates import get_chat_template, train_on_responses_only
 
@@ -110,7 +111,7 @@ def main():
     print(f"\n[4/5] Menyiapkan SFTTrainer...")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    training_args = SFTConfig(
+    training_args = TrainingArguments(
         output_dir                  = OUTPUT_DIR,
         num_train_epochs            = EPOCHS,
         per_device_train_batch_size = BATCH_SIZE,
@@ -130,19 +131,19 @@ def main():
         metric_for_best_model       = "eval_loss",
         greater_is_better           = False,
         report_to                   = "none",    # Ganti ke "wandb" jika pakai wandb
-        dataset_text_field          = "text",
-        max_seq_length              = MAX_SEQ_LEN,
-        packing                     = False,     # False lebih aman untuk data panjang bervariasi
         seed                        = 42,
         dataloader_num_workers      = 2,
     )
 
     trainer = SFTTrainer(
-        model           = model,
-        tokenizer       = tokenizer,
-        train_dataset   = train_dataset,
-        eval_dataset    = val_dataset,
-        args            = training_args,
+        model               = model,
+        tokenizer           = tokenizer,
+        train_dataset       = train_dataset,
+        eval_dataset        = val_dataset,
+        dataset_text_field  = "text",
+        max_seq_length      = MAX_SEQ_LEN,
+        packing             = False,
+        args                = training_args,
     )
 
     # Train only on assistant responses (bukan prompt/system)
