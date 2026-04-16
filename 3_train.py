@@ -7,10 +7,10 @@ Jalankan: python 3_train.py
 
 import unsloth  # harus diimport pertama sebelum trl/transformers/peft
 import os
-import json
 import torch
 from unsloth import FastLanguageModel
 from unsloth.chat_templates import get_chat_template, train_on_responses_only
+from peft import LoraConfig, TaskType, get_peft_model
 from datasets import load_dataset
 from trl import SFTTrainer
 from transformers import TrainingArguments
@@ -59,20 +59,22 @@ def main():
     print("  Chat template Mistral diterapkan.")
 
     # ── 2. Tambahkan adapter LoRA ─────────────────────────────────────────────
+    # Pakai standard PEFT langsung (hindari FastLanguageModel.get_peft_model
+    # yang konflik dengan versi peft/torch tertentu)
     print(f"\n[2/5] Menambahkan LoRA adapter (r={LORA_R}, alpha={LORA_ALPHA})")
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r                   = LORA_R,
-        lora_alpha          = LORA_ALPHA,
-        lora_dropout        = LORA_DROPOUT,
-        target_modules      = [
+    model.enable_input_require_grads()  # diperlukan untuk gradient checkpointing
+    lora_config = LoraConfig(
+        r             = LORA_R,
+        lora_alpha    = LORA_ALPHA,
+        lora_dropout  = LORA_DROPOUT,
+        target_modules = [
             "q_proj", "k_proj", "v_proj", "o_proj",
             "gate_proj", "up_proj", "down_proj",
         ],
-        bias                = "none",
-        use_gradient_checkpointing = "unsloth",  # Hemat VRAM
-        random_state        = 42,
+        bias          = "none",
+        task_type     = TaskType.CAUSAL_LM,
     )
+    model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
     # ── 3. Load dataset ───────────────────────────────────────────────────────
