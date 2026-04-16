@@ -12,10 +12,9 @@ from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    TrainingArguments,
 )
 from peft import LoraConfig, TaskType, get_peft_model
-from trl import SFTTrainer
+from trl import SFTTrainer, SFTConfig
 
 # ══════════════════════════════════════════════════════════════════════════════
 # KONFIGURASI
@@ -105,7 +104,7 @@ def main():
     print(f"\n[4/5] Menyiapkan trainer...")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    training_args = TrainingArguments(
+    training_args = SFTConfig(
         output_dir                  = OUTPUT_DIR,
         num_train_epochs            = EPOCHS,
         per_device_train_batch_size = BATCH_SIZE,
@@ -128,17 +127,17 @@ def main():
         report_to                   = "none",
         seed                        = 42,
         dataloader_num_workers      = 2,
+        dataset_text_field          = "text",
+        max_seq_length              = MAX_SEQ_LEN,
+        packing                     = False,
     )
 
     trainer = SFTTrainer(
-        model              = model,
-        processing_class   = tokenizer,
-        train_dataset      = train_dataset,
-        eval_dataset       = val_dataset,
-        dataset_text_field = "text",
-        max_seq_length     = MAX_SEQ_LEN,
-        packing            = False,
-        args               = training_args,
+        model            = model,
+        processing_class = tokenizer,
+        train_dataset    = train_dataset,
+        eval_dataset     = val_dataset,
+        args             = training_args,
     )
 
     # ── 5. Training ───────────────────────────────────────────────────────────
