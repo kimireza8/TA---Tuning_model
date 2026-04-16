@@ -51,37 +51,29 @@ echo "llama-quantize : $QUANTIZE_BIN"
 # Install Python deps untuk convert script
 pip install -r "$LLAMA_CPP/requirements.txt" --quiet
 
-# ── Step 1: Konversi langsung ke Q4_K_M (hemat disk, skip fp16) ──────────────
-# Disk terbatas — konversi langsung tanpa intermediate fp16 (~14.5 GB)
-# Q4_K_M hanya ~4.1 GB, cukup untuk sisa disk
+# ── Step 1: Konversi HuggingFace → GGUF Q8_0 ─────────────────────────────────
+# convert_hf_to_gguf.py hanya support: f32, f16, bf16, q8_0, auto
+# Q8_0 (~7.7 GB) sebagai base, lalu quantize ke Q4_K_M
 echo ""
-echo "[1/2] Konversi HuggingFace → GGUF Q4_K_M langsung (~4.1 GB)..."
+echo "[1/2] Konversi HuggingFace → GGUF Q8_0 (~7.7 GB)..."
 python "$LLAMA_CPP/convert_hf_to_gguf.py" \
     "$MERGED_DIR" \
-    --outfile "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf" \
-    --outtype q4_k_m
+    --outfile "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf" \
+    --outtype q8_0
+
+echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
+ls -lh "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
+
+# ── Step 2: Quantisasi Q8_0 → Q4_K_M ────────────────────────────────────────
+echo ""
+echo "[2/2] Quantisasi → Q4_K_M (~4.1 GB, rekomendasi)..."
+"$QUANTIZE_BIN" \
+    "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf" \
+    "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf" \
+    Q4_K_M
 
 echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
 ls -lh "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
-
-# ── Step 2: Hapus merged model untuk bebaskan disk, lalu buat Q8_0 ────────────
-echo ""
-echo "[2/2] Membuat Q8_0 (~7.7 GB, kualitas lebih tinggi)..."
-echo "  Catatan: butuh disk ~7.7 GB. Cek sisa disk dulu:"
-df -h /workspace | tail -1
-
-# Konversi ke Q8_0 dari Q4_K_M tidak bisa (lossy), jadi skip jika disk < 8 GB
-AVAIL=$(df /workspace | awk 'NR==2{print $4}')
-if [ "$AVAIL" -gt 8388608 ]; then   # > 8 GB dalam KB
-    python "$LLAMA_CPP/convert_hf_to_gguf.py" \
-        "$MERGED_DIR" \
-        --outfile "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf" \
-        --outtype q8_0
-    echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
-    ls -lh "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
-else
-    echo "  SKIP: disk tidak cukup untuk Q8_0. Gunakan Q4_K_M saja."
-fi
 
 # ── Ringkasan ─────────────────────────────────────────────────────────────────
 echo ""
