@@ -18,10 +18,11 @@ pip install --upgrade pip --quiet
 echo ">>> Membersihkan package konflik..."
 pip uninstall -y torchvision torchaudio torchao triton 2>/dev/null || true
 
-# ── Pastikan torch pakai CUDA (bukan CPU-only) ───────────────────────────────
-# Instance ini pakai CUDA 12.6 (terlihat dari torchvision+cu126 yang pre-installed)
-echo ">>> Menginstal torch 2.6.0 + CUDA 12.6..."
-pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126 --quiet
+# ── Install torch + torchvision versi matching ───────────────────────────────
+# torchvision 0.20.1 dibutuhkan oleh unsloth_zoo (vision_utils)
+# torch 2.5.1+cu124 = torchvision 0.20.1+cu124
+echo ">>> Menginstal torch 2.5.1 + torchvision 0.20.1 + CUDA 12.4..."
+pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124 --quiet
 
 # Verifikasi GPU terdeteksi
 python -c "
@@ -47,7 +48,7 @@ echo ">>> Menginstal dependencies training..."
 pip install \
     transformers==4.44.2 \
     trl==0.11.4 \
-    peft==0.13.2 \
+    peft==0.11.1 \
     accelerate==0.34.2 \
     bitsandbytes==0.44.1 \
     datasets==3.1.0 \
@@ -64,8 +65,9 @@ echo ">>> Menginstal Flash Attention 2 (butuh beberapa menit)..."
 pip install flash-attn==2.6.3 --no-build-isolation --quiet || \
     echo "  [WARNING] Flash Attention gagal diinstall — training tetap bisa jalan, tapi lebih lambat."
 
-# ── Pastikan torchvision/torchao tidak ikut tertarik kembali ─────────────────
-pip uninstall -y torchvision torchaudio torchao 2>/dev/null || true
+# ── Buang torchao — konflik dengan torch 2.5.1 (butuh torch>=2.6 untuk torch.int1) ──
+pip uninstall -y torchao 2>/dev/null || true
+python -c "import torchao" 2>&1 | grep -q "No module" && echo "  OK: torchao tidak terinstall" || echo "  WARNING: torchao masih ada, jalankan: pip uninstall torchao -y"
 
 # ── llama.cpp untuk konversi GGUF ────────────────────────────────────────────
 echo ">>> Menyiapkan llama.cpp untuk konversi GGUF..."

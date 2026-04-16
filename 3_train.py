@@ -26,7 +26,7 @@ DATA_DIR     = "/workspace/data"
 # LoRA hyperparameters
 LORA_R       = 16       # Rank LoRA — naikan ke 32 jika mau kapasitas lebih besar
 LORA_ALPHA   = 32       # Biasanya 2x rank
-LORA_DROPOUT = 0.05
+LORA_DROPOUT = 0       # 0 = Unsloth full optimization, >0 = performance hit
 
 # Training hyperparameters
 MAX_SEQ_LEN  = 2048     # Panjang maksimum token per sample
