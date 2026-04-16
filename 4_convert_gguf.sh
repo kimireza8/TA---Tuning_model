@@ -51,38 +51,37 @@ echo "llama-quantize : $QUANTIZE_BIN"
 # Install Python deps untuk convert script
 pip install -r "$LLAMA_CPP/requirements.txt" --quiet
 
-# ── Step 1: Konversi HuggingFace → GGUF fp16 ─────────────────────────────────
+# ── Step 1: Konversi langsung ke Q4_K_M (hemat disk, skip fp16) ──────────────
+# Disk terbatas — konversi langsung tanpa intermediate fp16 (~14.5 GB)
+# Q4_K_M hanya ~4.1 GB, cukup untuk sisa disk
 echo ""
-echo "[1/3] Konversi HuggingFace → GGUF (fp16)..."
+echo "[1/2] Konversi HuggingFace → GGUF Q4_K_M langsung (~4.1 GB)..."
 python "$LLAMA_CPP/convert_hf_to_gguf.py" \
     "$MERGED_DIR" \
-    --outfile "$GGUF_DIR/${MODEL_NAME}-fp16.gguf" \
-    --outtype f16
-
-echo "  OK: $GGUF_DIR/${MODEL_NAME}-fp16.gguf"
-ls -lh "$GGUF_DIR/${MODEL_NAME}-fp16.gguf"
-
-# ── Step 2: Quantisasi Q4_K_M (rekomendasi) ──────────────────────────────────
-echo ""
-echo "[2/3] Quantisasi → Q4_K_M (~4.1 GB, rekomendasi)..."
-"$QUANTIZE_BIN" \
-    "$GGUF_DIR/${MODEL_NAME}-fp16.gguf" \
-    "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf" \
-    Q4_K_M
+    --outfile "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf" \
+    --outtype q4_k_m
 
 echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
 ls -lh "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
 
-# ── Step 3: Quantisasi Q8_0 (kualitas lebih tinggi) ──────────────────────────
+# ── Step 2: Hapus merged model untuk bebaskan disk, lalu buat Q8_0 ────────────
 echo ""
-echo "[3/3] Quantisasi → Q8_0 (~7.7 GB, kualitas lebih tinggi)..."
-"$QUANTIZE_BIN" \
-    "$GGUF_DIR/${MODEL_NAME}-fp16.gguf" \
-    "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf" \
-    Q8_0
+echo "[2/2] Membuat Q8_0 (~7.7 GB, kualitas lebih tinggi)..."
+echo "  Catatan: butuh disk ~7.7 GB. Cek sisa disk dulu:"
+df -h /workspace | tail -1
 
-echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
-ls -lh "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
+# Konversi ke Q8_0 dari Q4_K_M tidak bisa (lossy), jadi skip jika disk < 8 GB
+AVAIL=$(df /workspace | awk 'NR==2{print $4}')
+if [ "$AVAIL" -gt 8388608 ]; then   # > 8 GB dalam KB
+    python "$LLAMA_CPP/convert_hf_to_gguf.py" \
+        "$MERGED_DIR" \
+        --outfile "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf" \
+        --outtype q8_0
+    echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
+    ls -lh "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
+else
+    echo "  SKIP: disk tidak cukup untuk Q8_0. Gunakan Q4_K_M saja."
+fi
 
 # ── Ringkasan ─────────────────────────────────────────────────────────────────
 echo ""
