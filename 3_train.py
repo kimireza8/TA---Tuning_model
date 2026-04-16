@@ -128,7 +128,7 @@ def main():
         seed                        = 42,
         dataloader_num_workers      = 2,
         dataset_text_field          = "text",
-        max_seq_length              = MAX_SEQ_LEN,
+        max_length                  = MAX_SEQ_LEN,
         packing                     = False,
     )
 
