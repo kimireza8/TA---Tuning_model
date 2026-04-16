@@ -5,14 +5,15 @@ Hardware target: RTX 4090 (24 GB VRAM) di Vast.ai
 Jalankan: python 3_train.py
 """
 
+import unsloth  # harus diimport pertama sebelum trl/transformers/peft
 import os
 import json
 import torch
+from unsloth import FastLanguageModel
+from unsloth.chat_templates import get_chat_template, train_on_responses_only
 from datasets import load_dataset
 from trl import SFTTrainer
 from transformers import TrainingArguments
-from unsloth import FastLanguageModel
-from unsloth.chat_templates import get_chat_template, train_on_responses_only
 
 # ══════════════════════════════════════════════════════════════════════════════
 # KONFIGURASI — ubah sesuai kebutuhan

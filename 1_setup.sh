@@ -19,8 +19,9 @@ echo ">>> Membersihkan package konflik..."
 pip uninstall -y torchvision torchaudio torchao triton 2>/dev/null || true
 
 # ── Pastikan torch pakai CUDA (bukan CPU-only) ───────────────────────────────
-echo ">>> Menginstal torch 2.5.1 + CUDA 12.4..."
-pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124 --quiet
+# Instance ini pakai CUDA 12.6 (terlihat dari torchvision+cu126 yang pre-installed)
+echo ">>> Menginstal torch 2.6.0 + CUDA 12.6..."
+pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126 --quiet
 
 # Verifikasi GPU terdeteksi
 python -c "
@@ -32,15 +33,14 @@ print(f'  GPU     : {torch.cuda.get_device_name(0)}')
 print(f'  VRAM    : {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')
 "
 
-# ── Triton yang kompatibel dengan torch 2.5.1 ────────────────────────────────
+# ── Triton yang kompatibel dengan torch 2.6.0 ────────────────────────────────
 echo ">>> Menginstal triton yang kompatibel..."
-pip install triton==3.1.0 --quiet
+pip install triton==3.2.0 --quiet
 
 # ── Unsloth ──────────────────────────────────────────────────────────────────
 echo ">>> Menginstal Unsloth..."
-pip install \
-    "unsloth @ git+https://github.com/unslothai/unsloth.git" \
-    --no-deps --quiet
+pip install unsloth_zoo --quiet
+pip install "unsloth @ git+https://github.com/unslothai/unsloth.git" --quiet
 
 # ── Dependencies training (versi yang sudah diverifikasi tidak konflik) ───────
 echo ">>> Menginstal dependencies training..."
