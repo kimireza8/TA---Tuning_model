@@ -113,7 +113,7 @@ def main():
         gradient_accumulation_steps = GRAD_ACCUM,
         gradient_checkpointing      = True,
         learning_rate               = LR,
-        warmup_ratio                = WARMUP_RATIO,
+        warmup_steps                = 50,
         weight_decay                = WEIGHT_DECAY,
         lr_scheduler_type           = "cosine",
         bf16                        = True,
@@ -132,7 +132,7 @@ def main():
 
     trainer = SFTTrainer(
         model              = model,
-        tokenizer          = tokenizer,
+        processing_class   = tokenizer,
         train_dataset      = train_dataset,
         eval_dataset       = val_dataset,
         dataset_text_field = "text",
