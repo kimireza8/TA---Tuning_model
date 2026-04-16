@@ -7,6 +7,7 @@ Jalankan: python 3_train.py
 """
 
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import torch
 from datasets import load_dataset
 from transformers import (
@@ -28,9 +29,9 @@ LORA_R       = 16
 LORA_ALPHA   = 32
 LORA_DROPOUT = 0.05
 
-MAX_SEQ_LEN  = 2048
-BATCH_SIZE   = 4
-GRAD_ACCUM   = 4
+MAX_SEQ_LEN  = 1024
+BATCH_SIZE   = 2
+GRAD_ACCUM   = 8    # effective batch tetap 16
 EPOCHS       = 3
 LR           = 2e-4
 WARMUP_RATIO = 0.05
