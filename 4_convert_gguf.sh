@@ -51,29 +51,35 @@ echo "llama-quantize : $QUANTIZE_BIN"
 # Install Python deps untuk convert script
 pip install -r "$LLAMA_CPP/requirements.txt" --quiet
 
-# ── Step 1: Konversi HuggingFace → GGUF Q8_0 ─────────────────────────────────
-# convert_hf_to_gguf.py hanya support: f32, f16, bf16, q8_0, auto
-# Q8_0 (~7.7 GB) sebagai base, lalu quantize ke Q4_K_M
+# ── Step 1: Konversi HuggingFace → GGUF F16 ──────────────────────────────────
+# llama-quantize hanya bisa quantize dari F16/F32, bukan dari Q8_0
 echo ""
-echo "[1/2] Konversi HuggingFace → GGUF Q8_0 (~7.7 GB)..."
+echo "[1/3] Konversi HuggingFace → GGUF F16 (~14.5 GB)..."
 python "$LLAMA_CPP/convert_hf_to_gguf.py" \
     "$MERGED_DIR" \
-    --outfile "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf" \
-    --outtype q8_0
+    --outfile "$GGUF_DIR/${MODEL_NAME}-f16.gguf" \
+    --outtype f16
 
-echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
-ls -lh "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
+echo "  OK: $GGUF_DIR/${MODEL_NAME}-f16.gguf"
+ls -lh "$GGUF_DIR/${MODEL_NAME}-f16.gguf"
 
-# ── Step 2: Quantisasi Q8_0 → Q4_K_M ────────────────────────────────────────
+# ── Step 2: Quantisasi F16 → Q4_K_M ─────────────────────────────────────────
 echo ""
-echo "[2/2] Quantisasi → Q4_K_M (~4.1 GB, rekomendasi)..."
+echo "[2/3] Quantisasi → Q4_K_M (~4.1 GB, rekomendasi)..."
 "$QUANTIZE_BIN" \
-    "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf" \
+    "$GGUF_DIR/${MODEL_NAME}-f16.gguf" \
     "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf" \
     Q4_K_M
 
 echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
 ls -lh "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
+
+# ── Step 3: Hapus F16 untuk hemat disk ───────────────────────────────────────
+echo ""
+echo "[3/3] Menghapus F16 (tidak diperlukan lagi)..."
+rm -f "$GGUF_DIR/${MODEL_NAME}-f16.gguf"
+echo "  Disk sekarang:"
+df -h /workspace | tail -1
 
 # ── Ringkasan ─────────────────────────────────────────────────────────────────
 echo ""
