@@ -64,7 +64,7 @@ Fine-tuning model Mistral 7B menggunakan LoRA untuk menghasilkan berita jurnalis
 |-------------------|-------|
 | LoRA rank (r)     | 16 |
 | LoRA alpha        | 32 |
-| LoRA dropout      | 0.05 |
+| LoRA dropout      | 0 |
 | Target modules    | q/k/v/o_proj, gate/up/down_proj |
 
 **Hyperparameter Training:**
@@ -83,9 +83,11 @@ Fine-tuning model Mistral 7B menggunakan LoRA untuk menghasilkan berita jurnalis
 
 ### Prasyarat
 
-- Akses instance Vast.ai dengan GPU RTX 4090
+- Instance Vast.ai: image `vastai/pytorch_cuda-12.4.1-auto`, GPU RTX 4090
 - SSH client di mesin lokal
 - llama.cpp terinstall di mesin lokal (untuk inferensi)
+
+> **Catatan penting:** Jangan gunakan environment bawaan instance (`/venv/main`) karena sudah berisi package lama yang konflik. Setup di bawah membuat venv bersih di `/workspace/train_env`.
 
 ### 1. Clone Repository di Vast.ai
 
@@ -110,8 +112,11 @@ cp train.json val.json /workspace/data/
 ### 2. Jalankan di Vast.ai
 
 ```bash
-# Step 1 — Install dependencies (~10 menit)
+# Step 1 — Buat venv bersih & install dependencies (~10-15 menit)
 bash 1_setup.sh
+
+# Aktifkan venv baru (wajib setiap kali buka terminal baru)
+source /workspace/train_env/bin/activate
 
 # Step 2 — Validasi & siapkan dataset
 python 2_prepare_dataset.py
@@ -125,6 +130,11 @@ python 5_test_inference.py
 # Step 5 — Konversi ke GGUF
 bash 4_convert_gguf.sh
 ```
+
+> **Setiap kali buka terminal baru di instance yang sama**, jalankan dulu:
+> ```bash
+> source /workspace/train_env/bin/activate
+> ```
 
 ### 3. Download GGUF ke Lokal
 
@@ -193,22 +203,31 @@ Setelah seluruh proses selesai, struktur output di server:
 
 ## Troubleshooting
 
+**Import error / dependency conflict saat training:**
+- Pastikan venv bersih aktif: `source /workspace/train_env/bin/activate`
+- Jangan gunakan `/venv/main` (environment bawaan instance yang sudah terkontaminasi)
+- Jika venv rusak, hapus dan buat ulang: `rm -rf /workspace/train_env && bash 1_setup.sh`
+
+**CUDA tidak terdeteksi (`torch.cuda.is_available()` = False):**
+```bash
+source /workspace/train_env/bin/activate
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+# Harus: 2.6.0+cu126 True
+```
+
 **CUDA out of memory saat training:**
 - Kurangi `BATCH_SIZE` dari 4 ke 2 di `3_train.py`
 - Atau aktifkan `load_in_4bit = True` untuk QLoRA
 
 **`convert_hf_to_gguf.py` tidak ditemukan:**
 ```bash
-# Pastikan llama.cpp sudah ter-clone dengan benar
-ls /workspace/llama.cpp/convert_hf_to_gguf.py
-# Jika tidak ada, re-clone:
 git clone https://github.com/ggerganov/llama.cpp /workspace/llama.cpp
+pip install -r /workspace/llama.cpp/requirements.txt
 ```
 
 **`llama-quantize` tidak ditemukan:**
 ```bash
-# Build llama.cpp terlebih dahulu
-cd /workspace/llama.cpp && make -j$(nproc)
+cd /workspace/llama.cpp && make -j$(nproc) llama-quantize
 ```
 
 **Hasil generasi terlalu pendek atau tidak relevan:**

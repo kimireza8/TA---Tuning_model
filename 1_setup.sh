@@ -2,98 +2,81 @@
 # =============================================================================
 # STEP 1: Setup environment
 # Target: Vast.ai — vastai/pytorch_cuda-12.4.1-auto — RTX 4090
+# Strategi: buat venv BARU yang bersih, hindari konflik base image /venv/main
 # =============================================================================
 
 set -e
 
+VENV_PATH="/workspace/train_env"
+
 echo "========================================================"
-echo "Setup untuk CUDA 12.4 + PyTorch (RTX 4090 - Vast.ai)"
+echo "Setup venv bersih untuk fine-tuning (RTX 4090)"
 echo "========================================================"
 
 # ── System packages ──────────────────────────────────────────────────────────
-apt-get update -qq && apt-get install -y git git-lfs curl wget build-essential
+apt-get update -qq && apt-get install -y git git-lfs curl wget build-essential python3-venv
+
+# ── Buat venv baru yang bersih ───────────────────────────────────────────────
+echo ">>> Membuat virtual environment bersih di $VENV_PATH..."
+python3 -m venv "$VENV_PATH" --clear
+source "$VENV_PATH/bin/activate"
 pip install --upgrade pip --quiet
 
-# ── Bersihkan package yang sering konflik ────────────────────────────────────
-echo ">>> Membersihkan package konflik..."
-pip uninstall -y torchvision torchaudio torchao triton 2>/dev/null || true
+echo ">>> Python: $(which python) — $(python --version)"
 
-# ── Install torch + torchvision versi matching ───────────────────────────────
-# torchvision 0.20.1 dibutuhkan oleh unsloth_zoo (vision_utils)
-# torch 2.5.1+cu124 = torchvision 0.20.1+cu124
-echo ">>> Menginstal torch 2.5.1 + torchvision 0.20.1 + CUDA 12.4..."
-pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124 --quiet
+# ── Torch 2.6.0 + torchvision + CUDA 12.6 ───────────────────────────────────
+echo ">>> Menginstal torch 2.6.0+cu126..."
+pip install torch==2.6.0 torchvision==0.21.0 \
+    --index-url https://download.pytorch.org/whl/cu126 --quiet
 
-# Verifikasi GPU terdeteksi
+# Verifikasi GPU
 python -c "
 import torch
-assert torch.cuda.is_available(), 'CUDA tidak tersedia! Cek driver GPU.'
-print(f'  torch   : {torch.__version__}')
-print(f'  CUDA    : {torch.version.cuda}')
-print(f'  GPU     : {torch.cuda.get_device_name(0)}')
-print(f'  VRAM    : {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')
+assert torch.cuda.is_available(), 'CUDA tidak tersedia!'
+print(f'  torch : {torch.__version__}')
+print(f'  GPU   : {torch.cuda.get_device_name(0)}')
+print(f'  VRAM  : {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB')
 "
 
-# ── Triton yang kompatibel dengan torch 2.6.0 ────────────────────────────────
-echo ">>> Menginstal triton yang kompatibel..."
-pip install triton==3.2.0 --quiet
-
-# ── Unsloth ──────────────────────────────────────────────────────────────────
+# ── Unsloth + semua dependency-nya ──────────────────────────────────────────
+# Biarkan unsloth menentukan versi transformers/trl yang cocok
 echo ">>> Menginstal Unsloth..."
-pip install unsloth_zoo --quiet
 pip install "unsloth @ git+https://github.com/unslothai/unsloth.git" --quiet
 
-# ── Dependencies training (versi yang sudah diverifikasi tidak konflik) ───────
-echo ">>> Menginstal dependencies training..."
+# ── Package training tambahan ────────────────────────────────────────────────
+echo ">>> Menginstal package training..."
 pip install \
-    transformers==4.44.2 \
-    trl==0.11.4 \
-    peft==0.11.1 \
-    accelerate==0.34.2 \
-    bitsandbytes==0.44.1 \
-    datasets==3.1.0 \
+    bitsandbytes \
+    datasets \
     sentencepiece \
     protobuf \
     scipy \
     einops \
-    packaging \
-    ninja \
     --quiet
 
-# Flash Attention 2 — mempercepat training secara signifikan di RTX 4090
-echo ">>> Menginstal Flash Attention 2 (butuh beberapa menit)..."
-pip install flash-attn==2.6.3 --no-build-isolation --quiet || \
-    echo "  [WARNING] Flash Attention gagal diinstall — training tetap bisa jalan, tapi lebih lambat."
-
-# ── Buang torchao — konflik dengan torch 2.5.1 (butuh torch>=2.6 untuk torch.int1) ──
+# ── Hapus torchao jika ikut terpasang ────────────────────────────────────────
 pip uninstall -y torchao 2>/dev/null || true
-python -c "import torchao" 2>&1 | grep -q "No module" && echo "  OK: torchao tidak terinstall" || echo "  WARNING: torchao masih ada, jalankan: pip uninstall torchao -y"
 
-# ── llama.cpp untuk konversi GGUF ────────────────────────────────────────────
-echo ">>> Menyiapkan llama.cpp untuk konversi GGUF..."
-if [ ! -d "/workspace/llama.cpp" ]; then
-    git clone https://github.com/ggerganov/llama.cpp /workspace/llama.cpp --depth=1
-fi
-cd /workspace/llama.cpp
-make -j$(nproc) llama-quantize 2>/dev/null || make -j$(nproc) GGML_CUDA=1
-pip install -r requirements.txt --quiet
-
-# ── Verifikasi akhir ─────────────────────────────────────────────────────────
+# ── Verifikasi akhir ──────────────────────────────────────────────────────────
 echo ""
 echo "========================================================"
 echo "Verifikasi instalasi:"
 python -c "
-import torch
-from transformers import __version__ as tv
-from peft import __version__ as pv
-from trl import __version__ as trlv
-from datasets import __version__ as dv
-print(f'  torch          : {torch.__version__}  (CUDA: {torch.cuda.is_available()})')
-print(f'  transformers   : {tv}')
-print(f'  peft           : {pv}')
-print(f'  trl            : {trlv}')
-print(f'  datasets       : {dv}')
+import torch, transformers, peft, trl, datasets, unsloth
+print(f'  torch        : {torch.__version__}  CUDA={torch.cuda.is_available()}')
+print(f'  transformers : {transformers.__version__}')
+print(f'  peft         : {peft.__version__}')
+print(f'  trl          : {trl.__version__}')
+print(f'  datasets     : {datasets.__version__}')
+print(f'  unsloth      : {unsloth.__version__}')
+print()
+print('Semua OK!')
 "
 echo "========================================================"
 echo ""
-echo ">>> Setup selesai! Lanjut ke: python 2_prepare_dataset.py"
+echo "PENTING: Aktifkan venv ini setiap kali masuk instance:"
+echo "  source $VENV_PATH/bin/activate"
+echo ""
+echo ">>> Setup selesai! Lanjut ke:"
+echo "  python 2_prepare_dataset.py"
+echo "  python 3_train.py"
