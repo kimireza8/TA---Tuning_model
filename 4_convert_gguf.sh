@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # STEP 4: Konversi model hasil tuning ke GGUF
-# Jalankan setelah training selesai
+# Jalankan setelah training selesai (python 3_train.py)
 # =============================================================================
 
 set -e
@@ -11,63 +11,88 @@ GGUF_DIR="/workspace/outputs/gguf"
 MODEL_NAME="mistral-pens"
 LLAMA_CPP="/workspace/llama.cpp"
 
-mkdir -p "$GGUF_DIR"
+echo "============================================"
+echo "Konversi model ke GGUF"
+echo "============================================"
 
-echo "============================================"
-echo "Konversi ke GGUF"
-echo "============================================"
+# ── Cek merged model ada ──────────────────────────────────────────────────────
+if [ ! -d "$MERGED_DIR" ]; then
+    echo "ERROR: Merged model tidak ditemukan di $MERGED_DIR"
+    echo "Pastikan training sudah selesai (python 3_train.py)"
+    exit 1
+fi
 echo "Input  : $MERGED_DIR"
 echo "Output : $GGUF_DIR"
-echo ""
+mkdir -p "$GGUF_DIR"
 
-# ── Step 4a: Konversi ke GGUF (float16 dulu) ────────────────────────────────
+# ── Clone & build llama.cpp jika belum ada ────────────────────────────────────
+if [ ! -d "$LLAMA_CPP" ]; then
+    echo ""
+    echo "[0/3] Cloning llama.cpp..."
+    git clone https://github.com/ggerganov/llama.cpp "$LLAMA_CPP" --depth=1
+fi
+
+# Build llama-quantize jika belum ada
+QUANTIZE_BIN=""
+if [ -f "$LLAMA_CPP/build/bin/llama-quantize" ]; then
+    QUANTIZE_BIN="$LLAMA_CPP/build/bin/llama-quantize"
+elif [ -f "$LLAMA_CPP/llama-quantize" ]; then
+    QUANTIZE_BIN="$LLAMA_CPP/llama-quantize"
+else
+    echo ""
+    echo "Building llama-quantize..."
+    cd "$LLAMA_CPP"
+    cmake -B build -DGGML_CUDA=ON 2>/dev/null || cmake -B build
+    cmake --build build --config Release -j$(nproc) --target llama-quantize
+    QUANTIZE_BIN="$LLAMA_CPP/build/bin/llama-quantize"
+fi
+echo "llama-quantize : $QUANTIZE_BIN"
+
+# Install Python deps untuk convert script
+pip install -r "$LLAMA_CPP/requirements.txt" --quiet
+
+# ── Step 1: Konversi HuggingFace → GGUF fp16 ─────────────────────────────────
+echo ""
 echo "[1/3] Konversi HuggingFace → GGUF (fp16)..."
 python "$LLAMA_CPP/convert_hf_to_gguf.py" \
     "$MERGED_DIR" \
     --outfile "$GGUF_DIR/${MODEL_NAME}-fp16.gguf" \
     --outtype f16
 
-echo "  Berhasil: $GGUF_DIR/${MODEL_NAME}-fp16.gguf"
+echo "  OK: $GGUF_DIR/${MODEL_NAME}-fp16.gguf"
 ls -lh "$GGUF_DIR/${MODEL_NAME}-fp16.gguf"
 
-# ── Step 4b: Quantisasi ke Q4_K_M ───────────────────────────────────────────
-# Q4_K_M: keseimbangan terbaik antara ukuran file dan kualitas
+# ── Step 2: Quantisasi Q4_K_M (rekomendasi) ──────────────────────────────────
 echo ""
-echo "[2/3] Quantisasi ke Q4_K_M (rekomendasi untuk llama.cpp)..."
-"$LLAMA_CPP/llama-quantize" \
+echo "[2/3] Quantisasi → Q4_K_M (~4.1 GB, rekomendasi)..."
+"$QUANTIZE_BIN" \
     "$GGUF_DIR/${MODEL_NAME}-fp16.gguf" \
     "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf" \
     Q4_K_M
 
-echo "  Berhasil: $GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
+echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
 ls -lh "$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf"
 
-# ── Step 4c: (Opsional) Quantisasi ke Q8_0 — lebih akurat, file lebih besar ──
+# ── Step 3: Quantisasi Q8_0 (kualitas lebih tinggi) ──────────────────────────
 echo ""
-echo "[3/3] Quantisasi ke Q8_0 (opsional, kualitas lebih tinggi)..."
-"$LLAMA_CPP/llama-quantize" \
+echo "[3/3] Quantisasi → Q8_0 (~7.7 GB, kualitas lebih tinggi)..."
+"$QUANTIZE_BIN" \
     "$GGUF_DIR/${MODEL_NAME}-fp16.gguf" \
     "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf" \
     Q8_0
 
-echo "  Berhasil: $GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
+echo "  OK: $GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
 ls -lh "$GGUF_DIR/${MODEL_NAME}-Q8_0.gguf"
 
-# ── Ringkasan ────────────────────────────────────────────────────────────────
+# ── Ringkasan ─────────────────────────────────────────────────────────────────
 echo ""
 echo "============================================"
 echo "Semua file GGUF siap:"
 ls -lh "$GGUF_DIR/"
 echo "============================================"
 echo ""
-echo "Download file yang Anda butuhkan:"
-echo "  Q4_K_M  → ukuran ~4.1 GB, kualitas bagus (REKOMENDASI)"
-echo "  Q8_0    → ukuran ~7.7 GB, kualitas sangat bagus"
-echo ""
-echo "Cara download dari Vast.ai ke lokal:"
+echo "Download ke lokal:"
 echo "  scp -P <PORT> root@<IP>:$GGUF_DIR/${MODEL_NAME}-Q4_K_M.gguf ."
 echo ""
-echo "Cara test dengan llama.cpp lokal:"
-echo "  ./llama-cli -m ${MODEL_NAME}-Q4_K_M.gguf \\"
-echo "    --chat-template mistral \\"
-echo "    -n 512 -i"
+echo "Test dengan llama.cpp lokal:"
+echo "  ./llama-cli -m ${MODEL_NAME}-Q4_K_M.gguf --chat-template mistral -n 512 -i"
